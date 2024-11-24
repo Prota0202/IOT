@@ -1,0 +1,44 @@
+//We are using a ESPE32 Heltec Wireless Stick Lite V3 
+******************************************************
+
+int receiverPin = 47;  
+int laserPin = 48;     
+unsigned long timer = 0; 
+bool stateHigh = false;
+bool isFull = false;
+bool notFull = false; 
+
+void setup() {
+  pinMode(receiverPin, INPUT);   
+  pinMode(laserPin, OUTPUT);     
+  digitalWrite(laserPin, HIGH);  
+  Serial.begin(115200);          
+}
+
+void loop() {
+
+  int State = digitalRead(receiverPin); 
+
+  if (State == LOW && notFull == false) {
+    Serial.println("Poubelle vide ou pas encore remplie");
+    timer = 0; 
+    stateHigh = false;
+    notFull = true; 
+  } 
+
+  if (State == HIGH && stateHigh == false) {
+    Serial.println("Début du comptage");
+    timer = millis(); 
+    stateHigh = true;
+    notFull = false; 
+  }
+
+  if (State == HIGH && stateHigh == true) {
+    if (millis() - timer >= 10000) {
+      Serial.println("Poubelle remplie !");
+       
+    }
+  }
+
+  delay(1000); 
+}
