@@ -37,25 +37,27 @@ void loop() {
   // **Partie Laser Infra-rouge**
   int State = digitalRead(receiverPin); 
 
-  if (State == LOW && notFull == false) {
+  if (State == LOW && notFull == false) {    
     Serial.println("Poubelle vide ou pas encore remplie");
     timer = 0; 
-    stateHigh = false;
-    notFull = true; 
+    stateHigh = false; // Tant que la faisceau n'es pas coupé la variabnle stateHigh reste false
+    notFull = true; // Passe à true car on bien vérifier que le faiseau n'est pas coupé
   } 
 
   if (State == HIGH && stateHigh == false) {
     Serial.println("Début du comptage");
-    timer = millis(); 
-    stateHigh = true;
-    notFull = false; 
+
+    timer = millis(); // le faisceau est coupé donc on commence à compter pour savoir s'il est coupé parce que la poubelle est remplie ou
+                      // Ou si y'a eu juste un passage de déchet 
+    
+    stateHigh = true; // Une fois le faisceau coupé state high devient true, ne redeviens false que si le faisceau n'est plus coupé 
+    notFull = false; // Repasse false car on est pas sur que la poubelle soit vide 
   }
 
-  if (State == HIGH && stateHigh == true) {
+  if (State == HIGH && stateHigh == true) { // Pendant tout le temps où on compte car le faisceau est coupé, on vérifie si on a dépassé 10 sec
     if (millis() - timer >= 10000) { // 10 secondes de détection
       Serial.print("Poubelle remplie à l'addresse : ");
-      printGPSLocation();
-      //printGPSLocation(); // Appeler la fonction pour afficher les coordonnées GPS
+      printGPSLocation(); // Appeler la fonction pour afficher les coordonnées GPS
       delay(5000);
     }
   }
@@ -66,7 +68,7 @@ void loop() {
     gps.encode(c); // Décoder les trames GPS
   }
 
-  delay(100); // Petite pause pour éviter la surcharge du microcontrôleur
+  delay(100); 
 }
 
 // Fonction pour afficher les données GPS uniquement lorsque la poubelle est pleine
