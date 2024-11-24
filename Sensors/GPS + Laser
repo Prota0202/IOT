@@ -1,0 +1,95 @@
+//We are using a ESPE32 Heltec Wireless Stick Lite V3 
+//Download the TinyGPSPlus library 
+******************************************************
+
+#include <TinyGPS++.h>
+
+int receiverPin = 47;  
+int laserPin = 48;     
+unsigned long timer = 0; 
+bool stateHigh = false;
+bool notFull = false;
+
+
+static const int RXPin = 18; // RX du GPS -> TX du GPS
+static const int TXPin = 17; // TX du GPS -> RX du GPS
+static const uint32_t GPSBaud = 9600; 
+
+TinyGPSPlus gps;
+
+
+unsigned long lastGPSUpdate = 0; 
+const unsigned long gpsUpdateInterval = 5000; // GPS mise à jour toutes les 5 secondes
+
+void setup() {
+  // Initialisation des pins pour le laser
+  pinMode(receiverPin, INPUT);   
+  pinMode(laserPin, OUTPUT);     
+  digitalWrite(laserPin, HIGH);  
+
+  // Initialisation des ports série
+  Serial.begin(115200);          
+  Serial1.begin(GPSBaud, SERIAL_8N1, RXPin, TXPin); 
+  Serial.println("Démarrage du système : Laser infra-rouge et GPS...");
+}
+
+void loop() {
+  // **Partie Laser Infra-rouge**
+  int State = digitalRead(receiverPin); 
+
+  if (State == LOW && notFull == false) {
+    Serial.println("Poubelle vide ou pas encore remplie");
+    timer = 0; 
+    stateHigh = false;
+    notFull = true; 
+  } 
+
+  if (State == HIGH && stateHigh == false) {
+    Serial.println("Début du comptage");
+    timer = millis(); 
+    stateHigh = true;
+    notFull = false; 
+  }
+
+  if (State == HIGH && stateHigh == true) {
+    if (millis() - timer >= 10000) { // 10 secondes de détection
+      Serial.print("Poubelle remplie à l'addresse : ");
+      printGPSLocation();
+      //printGPSLocation(); // Appeler la fonction pour afficher les coordonnées GPS
+      delay(5000);
+    }
+  }
+
+  // **Partie GPS : décoder les trames**
+  while (Serial1.available() > 0) {
+    char c = Serial1.read();
+    gps.encode(c); // Décoder les trames GPS
+  }
+
+  delay(100); // Petite pause pour éviter la surcharge du microcontrôleur
+}
+
+// Fonction pour afficher les données GPS uniquement lorsque la poubelle est pleine
+void printGPSLocation() {
+  // Vérifier si de nouvelles coordonnées GPS sont disponibles
+  if (gps.location.isUpdated()) {
+    float latitude = gps.location.lat();
+    float longitude = gps.location.lng();
+
+    // Informations GPS
+    //Serial.print("Latitude : ");
+    //Serial.println(latitude, 6);
+    //Serial.print("Longitude : ");
+    //Serial.println(longitude, 6);
+
+    // Lien Google Maps
+    Serial.print("https://www.google.com/maps?q=");
+    Serial.print(latitude, 6);
+    Serial.print(",");
+    Serial.println(longitude, 6);
+
+    Serial.println(); 
+  } else {
+    Serial.println("Pas encore de fix GPS valide...");
+  }
+}
