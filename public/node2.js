@@ -21,7 +21,7 @@ const client = mqtt.connect(`mqtt://${mqttOptions.host}:${mqttOptions.port}`, mq
 client.on('connect', () => {
     console.log('Connected to TTN via MQTT');
     // Abonnement au topic TTN pour recevoir les données des périphériques
-    client.subscribe('v3/appli-groupea@ttn/devices/my-end-device/up', (err) => {
+    client.subscribe('v3/appli-groupea@ttn/devices/+/up', (err) => { // Wildcard pour tous les devices
         if (err) {
             console.error('Subscription error:', err);
         } else {
@@ -47,8 +47,10 @@ client.on('message', (topic, message) => {
             console.log('Decoded payload:', decodedPayload);
 
             // Récupération des coordonnées GPS et du statut de la poubelle
-            const gpsData = ttnData.uplink_message.locations ? ttnData.uplink_message.locations.user : null;
-            const isFull = decodedPayload.includes('full'); // Exemple de statut basé sur le payload
+            const gpsData = ttnData.uplink_message.locations
+                ? ttnData.uplink_message.locations.user
+                : null; // Remplacez 'user' par la clé correcte si différente
+            const isFull = decodedPayload.includes('full'); // Exemple : "full" pour indiquer que la poubelle est pleine
 
             if (gpsData) {
                 const trashBinData = {
@@ -61,7 +63,11 @@ client.on('message', (topic, message) => {
 
                 // Émission des données GPS au client via Socket.io
                 io.emit('gps-data', trashBinData);
+            } else {
+                console.warn('No GPS data found in the message.');
             }
+        } else {
+            console.warn('No uplink_message found in the message.');
         }
     } catch (err) {
         console.error('Error parsing message:', err);
@@ -81,3 +87,12 @@ const PORT = 3000;
 server.listen(PORT, () => {
     console.log(`Server started on http://localhost:${PORT}`);
 });
+
+// Écouter les connexions client avec Socket.io
+io.on('connection', (socket) => {
+    console.log('New client connected');
+    socket.on('disconnect', () => {
+        console.log('Client disconnected');
+    });
+});
+

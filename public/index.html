@@ -35,25 +35,35 @@
                 L.marker([userLat, userLng]).addTo(map).bindPopup('Vous êtes ici.').openPopup();
 
                 const trashBins = [
-                    { id: 1, lat: 48.8566, lng: 2.3522 }, // Exemple: Paris
-                    { id: 2, lat: 48.8606, lng: 2.3376 }  // Exemple: Louvre
+                    { id: 1, location: [4.3525, 50.8467] }, // Grand-Place
+                    { id: 2, location: [4.3416, 50.8949] }, // Atomium
+                    { id: 3, location: [4.3925, 50.8419] }, // Parc du Cinquantenaire
+                    { id: 4, location: [4.3497, 50.8449] }, // Manneken Pis
+                    { id: 5, location: [4.3612, 50.8425] }  // Palais Royal
                 ];
 
                 trashBins.forEach(bin => {
-                    L.marker([bin.lat, bin.lng]).addTo(map).bindPopup(`<b>Poubelle ID:</b> ${bin.id}`);
+                    L.marker([bin.location[1], bin.location[0]]).addTo(map).bindPopup(`<b>Poubelle ID:</b> ${bin.id}`);
                 });
 
-                // Préparer les coordonnées pour OpenRouteService
-                const coordinates = [[userLng, userLat]]; // Ajout de la position de départ
-                trashBins.forEach(bin => coordinates.push([bin.lng, bin.lat]));
+                // Préparer la requête d'optimisation
+                const requestBody = {
+                    jobs: trashBins,
+                    vehicles: [
+                        {
+                            id: 1,
+                            profile: "driving-car", // Profil corrigé
+                            start: [userLng, userLat], // Position actuelle
+                            //end: [userLng, userLat]   // Retour à la position initiale (facultatif)
+                        }
+                    ]
+                };
 
                 try {
-                    // Appeler l'API OpenRouteService pour optimiser les trajets
+                    // Appeler l'API OpenRouteService pour optimiser le trajet
                     const response = await axios.post(
-                        `https://api.openrouteservice.org/v2/directions/driving-car`,
-                        {
-                            coordinates: coordinates
-                        },
+                        `https://api.openrouteservice.org/optimization`,
+                        requestBody,
                         {
                             headers: {
                                 Authorization: API_KEY
@@ -61,16 +71,24 @@
                         }
                     );
 
-                    const route = response.data.routes[0];
-                    const routeCoordinates = route.geometry.coordinates.map(coord => [coord[1], coord[0]]);
+                    console.log("Réponse de l'API d'optimisation :", response.data);
 
-                    // Ajouter la route optimisée sur la carte
-                    L.polyline(routeCoordinates, { color: 'blue', weight: 4 }).addTo(map);
+                    // Extraire l'itinéraire optimisé
+                    const steps = response.data.routes[0].steps;
 
-                    map.fitBounds(routeCoordinates);
+                    // Convertir les étapes en coordonnées pour Leaflet
+                    const optimizedRoute = steps.map(step => [step.location[1], step.location[0]]);
+                    console.log("Itinéraire optimisé :", optimizedRoute);
+
+                    // Ajouter l'itinéraire optimisé sur la carte
+                    const polylineLayer = L.polyline(optimizedRoute, { color: 'blue', weight: 4 }).addTo(map);
+                    console.log("Polyline ajoutée :", polylineLayer);
+
+                    // Ajuster la carte pour contenir tout l'itinéraire
+                    map.fitBounds(polylineLayer.getBounds());
                 } catch (error) {
-                    console.error("Erreur lors de l'appel à OpenRouteService:", error);
-                    alert("Impossible de calculer l'itinéraire optimisé.");
+                    console.error("Erreur lors de l'appel à l'API d'optimisation :", error.response || error);
+                    alert("Impossible d'optimiser l'itinéraire.");
                 }
             }, (error) => {
                 console.error("Erreur lors de la récupération de la position :", error);
