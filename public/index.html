@@ -3,21 +3,82 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Table des Données</title>
+    <title>Carte Optimisée des Poubelles</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <style>
+        #map {
+            height: 800px;
+            width: 100%;
+        }
+    </style>
 </head>
 <body>
-    <h1>Données des Périphériques</h1>
-    <table border="1" id="data-table">
-        <thead>
-            <tr>
-                <th>Device ID</th>
-                <th>Payload</th>
-            </tr>
-        </thead>
-        <tbody>
-            <!-- Les données seront insérées ici par JavaScript -->
-        </tbody>
-    </table>
-    <script src="node2.js"></script>
+    <h1>Carte Optimisée des Poubelles</h1>
+    <div id="map"></div>
+    <script>
+        const API_KEY = "5b3ce3597851110001cf624841cb73eff84c4ceba6a00867d1f54afa"; // Votre clé API OpenRouteService
+        const map = L.map('map').setView([0, 0], 13);
+
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(async (position) => {
+                const userLat = position.coords.latitude;
+                const userLng = position.coords.longitude;
+
+                map.setView([userLat, userLng], 13);
+                L.marker([userLat, userLng]).addTo(map).bindPopup('Vous êtes ici.').openPopup();
+
+                const trashBins = [
+                    { id: 1, lat: 48.8566, lng: 2.3522 }, // Exemple: Paris
+                    { id: 2, lat: 48.8606, lng: 2.3376 }  // Exemple: Louvre
+                ];
+
+                trashBins.forEach(bin => {
+                    L.marker([bin.lat, bin.lng]).addTo(map).bindPopup(`<b>Poubelle ID:</b> ${bin.id}`);
+                });
+
+                // Préparer les coordonnées pour OpenRouteService
+                const coordinates = [[userLng, userLat]]; // Ajout de la position de départ
+                trashBins.forEach(bin => coordinates.push([bin.lng, bin.lat]));
+
+                try {
+                    // Appeler l'API OpenRouteService pour optimiser les trajets
+                    const response = await axios.post(
+                        `https://api.openrouteservice.org/v2/directions/driving-car`,
+                        {
+                            coordinates: coordinates
+                        },
+                        {
+                            headers: {
+                                Authorization: API_KEY
+                            }
+                        }
+                    );
+
+                    const route = response.data.routes[0];
+                    const routeCoordinates = route.geometry.coordinates.map(coord => [coord[1], coord[0]]);
+
+                    // Ajouter la route optimisée sur la carte
+                    L.polyline(routeCoordinates, { color: 'blue', weight: 4 }).addTo(map);
+
+                    map.fitBounds(routeCoordinates);
+                } catch (error) {
+                    console.error("Erreur lors de l'appel à OpenRouteService:", error);
+                    alert("Impossible de calculer l'itinéraire optimisé.");
+                }
+            }, (error) => {
+                console.error("Erreur lors de la récupération de la position :", error);
+                alert("Impossible de récupérer votre position actuelle.");
+            });
+        } else {
+            alert("La géolocalisation n'est pas supportée par votre navigateur.");
+        }
+    </script>
 </body>
 </html>
