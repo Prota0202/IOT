@@ -7,16 +7,48 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
     <style>
         #map {
-            height: 800px;
+            height: 600px;
             width: 100%;
+        }
+
+        #trash-table {
+            margin-top: 20px;
+            border-collapse: collapse;
+            width: 100%;
+        }
+
+        #trash-table th, #trash-table td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: center;
+        }
+
+        #trash-table th {
+            background-color: #f2f2f2;
         }
     </style>
 </head>
 <body>
     <h1>Carte Optimisée des Poubelles</h1>
     <div id="map"></div>
+
+    <h2>Liste des Poubelles</h2>
+    <table id="trash-table">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Coordonnées</th>
+                <th>État</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Les données des poubelles seront ajoutées ici dynamiquement -->
+        </tbody>
+    </table>
+
     <script>
         const API_KEY = "5b3ce3597851110001cf624841cb73eff84c4ceba6a00867d1f54afa"; // Votre clé API OpenRouteService
         const map = L.map('map').setView([0, 0], 13);
@@ -26,77 +58,106 @@
             attribution: '© OpenStreetMap contributors'
         }).addTo(map);
 
-        if (navigator.geolocation) {
-            navigator.geolocation.getCurrentPosition(async (position) => {
-                const userLat = position.coords.latitude;
-                const userLng = position.coords.longitude;
+        const socket = io();
 
-                map.setView([userLat, userLng], 13);
-                L.marker([userLat, userLng]).addTo(map).bindPopup('Vous êtes ici.').openPopup();
+        // Fonction pour mettre à jour le tableau des poubelles
+        function updateTrashTable(trashBins) {
+            const tbody = document.querySelector('#trash-table tbody');
+            tbody.innerHTML = ''; // Réinitialise le contenu du tableau
 
-                const trashBins = [
-                    { id: 1, location: [4.3525, 50.8467] }, // Grand-Place
-                    { id: 2, location: [4.3416, 50.8949] }, // Atomium
-                    { id: 3, location: [4.3925, 50.8419] }, // Parc du Cinquantenaire
-                    { id: 4, location: [4.3497, 50.8449] }, // Manneken Pis
-                    { id: 5, location: [4.3612, 50.8425] }  // Palais Royal
-                ];
+            trashBins.forEach(bin => {
+                const row = document.createElement('tr');
 
-                trashBins.forEach(bin => {
-                    L.marker([bin.location[1], bin.location[0]]).addTo(map).bindPopup(`<b>Poubelle ID:</b> ${bin.id}`);
-                });
+                const idCell = document.createElement('td');
+                idCell.textContent = bin.id;
 
-                // Préparer la requête d'optimisation
-                const requestBody = {
-                    jobs: trashBins,
-                    vehicles: [
-                        {
-                            id: 1,
-                            profile: "driving-car", // Profil corrigé
-                            start: [userLng, userLat], // Position actuelle
-                            //end: [userLng, userLat]   // Retour à la position initiale (facultatif)
-                        }
-                    ]
-                };
+                const locationCell = document.createElement('td');
+                locationCell.textContent = `Lat: ${bin.location[1]}, Lng: ${bin.location[0]}`;
 
-                try {
-                    // Appeler l'API OpenRouteService pour optimiser le trajet
-                    const response = await axios.post(
-                        `https://api.openrouteservice.org/optimization`,
-                        requestBody,
-                        {
-                            headers: {
-                                Authorization: API_KEY
-                            }
-                        }
-                    );
+                const stateCell = document.createElement('td');
+                stateCell.textContent = bin.isFull ? 'Pleine' : 'Vide';
 
-                    console.log("Réponse de l'API d'optimisation :", response.data);
+                row.appendChild(idCell);
+                row.appendChild(locationCell);
+                row.appendChild(stateCell);
 
-                    // Extraire l'itinéraire optimisé
-                    const steps = response.data.routes[0].steps;
-
-                    // Convertir les étapes en coordonnées pour Leaflet
-                    const optimizedRoute = steps.map(step => [step.location[1], step.location[0]]);
-                    console.log("Itinéraire optimisé :", optimizedRoute);
-
-                    // Ajouter l'itinéraire optimisé sur la carte
-                    const polylineLayer = L.polyline(optimizedRoute, { color: 'blue', weight: 4 }).addTo(map);
-                    console.log("Polyline ajoutée :", polylineLayer);
-
-                    // Ajuster la carte pour contenir tout l'itinéraire
-                    map.fitBounds(polylineLayer.getBounds());
-                } catch (error) {
-                    console.error("Erreur lors de l'appel à l'API d'optimisation :", error.response || error);
-                    alert("Impossible d'optimiser l'itinéraire.");
-                }
-            }, (error) => {
-                console.error("Erreur lors de la récupération de la position :", error);
-                alert("Impossible de récupérer votre position actuelle.");
+                tbody.appendChild(row);
             });
-        } else {
-            alert("La géolocalisation n'est pas supportée par votre navigateur.");
         }
+
+        socket.on('trash-bin-data', async (trashBins) => {
+            // Vérification si la géolocalisation est supportée
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(async (position) => {
+                    const userLat = position.coords.latitude;
+                    const userLng = position.coords.longitude;
+
+                    map.setView([userLat, userLng], 13);
+                    L.marker([userLat, userLng]).addTo(map).bindPopup('Vous êtes ici.').openPopup();
+
+                    // Ajout des poubelles sur la carte
+                    trashBins.forEach(bin => {
+                        L.marker([bin.location[1], bin.location[0]]).addTo(map)
+                            .bindPopup(`<b>Poubelle ID:</b> ${bin.id} <br><b>État:</b> ${bin.isFull ? 'Pleine' : 'Vide'}`);
+                    });
+
+                    // Met à jour le tableau des poubelles
+                    updateTrashTable(trashBins);
+
+                    // Préparer la requête d'optimisation
+                    const requestBody = {
+                        jobs: trashBins.map(bin => ({
+                            id: bin.id,
+                            location: [bin.location[0], bin.location[1]]
+                        })),
+                        vehicles: [
+                            {
+                                id: 1,
+                                profile: "driving-car",
+                                start: [userLng, userLat]
+                            }
+                        ]
+                    };
+
+                    try {
+                        // Appeler l'API OpenRouteService pour optimiser le trajet
+                        const response = await axios.post(
+                            `https://api.openrouteservice.org/optimization`,
+                            requestBody,
+                            {
+                                headers: {
+                                    Authorization: API_KEY
+                                }
+                            }
+                        );
+
+                        console.log("Réponse de l'API d'optimisation :", response.data);
+
+                        // Extraire l'itinéraire optimisé
+                        const steps = response.data.routes[0].steps;
+
+                        // Convertir les étapes en coordonnées pour Leaflet
+                        const optimizedRoute = steps.map(step => [step.location[1], step.location[0]]);
+                        console.log("Itinéraire optimisé :", optimizedRoute);
+
+                        // Ajouter l'itinéraire optimisé sur la carte
+                        const polylineLayer = L.polyline(optimizedRoute, { color: 'blue', weight: 4 }).addTo(map);
+                        console.log("Polyline ajoutée :", polylineLayer);
+
+                        // Ajuster la carte pour contenir tout l'itinéraire
+                        map.fitBounds(polylineLayer.getBounds());
+                    } catch (error) {
+                        console.error("Erreur lors de l'appel à l'API d'optimisation :", error.response || error);
+                        alert("Impossible d'optimiser l'itinéraire.");
+                    }
+                }, (error) => {
+                    console.error("Erreur lors de la récupération de la position :", error);
+                    alert("Impossible de récupérer votre position actuelle.");
+                });
+            } else {
+                alert("La géolocalisation n'est pas supportée par votre navigateur.");
+            }
+        });
     </script>
 </body>
 </html>
