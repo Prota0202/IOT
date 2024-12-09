@@ -9,25 +9,109 @@
     <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
     <script src="/socket.io/socket.io.js"></script>
     <style>
+        /* Global styles */
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f9f9f9;
+            color: #333;
+        }
+
+        h1 {
+            text-align: center;
+            margin: 20px 0;
+            color: #4CAF50;
+            font-size: 36px;
+        }
+
+        h2 {
+            text-align: center;
+            margin: 20px 0;
+            color: #333;
+            font-size: 28px;
+        }
+
+        /* Map styles */
         #map {
             height: 600px;
-            width: 100%;
+            width: 90%;
+            margin: 20px auto;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
         }
 
+        /* Table styles */
         #trash-table {
-            margin-top: 20px;
+            margin: 20px auto;
             border-collapse: collapse;
-            width: 100%;
-        }
-
-        #trash-table th, #trash-table td {
-            border: 1px solid #ddd;
-            padding: 8px;
-            text-align: center;
+            width: 90%;
+            max-width: 1200px;
+            background-color: white;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            border-radius: 10px;
+            overflow: hidden;
         }
 
         #trash-table th {
+            background-color: #4CAF50;
+            color: white;
+            padding: 15px;
+            font-size: 18px;
+        }
+
+        #trash-table td {
+            border: 1px solid #ddd;
+            padding: 12px;
+            text-align: center;
+            font-size: 16px;
+        }
+
+        #trash-table tr:nth-child(even) {
             background-color: #f2f2f2;
+        }
+
+        #trash-table tr:hover {
+            background-color: #e8f5e9;
+        }
+
+        /* Button styles */
+        button {
+            display: block;
+            margin: 20px auto;
+            padding: 12px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 18px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: background-color 0.3s;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        /* Responsive styles */
+        @media (max-width: 768px) {
+            #map {
+                width: 100%;
+            }
+
+            #trash-table {
+                width: 100%;
+            }
+
+            h1, h2 {
+                font-size: 24px;
+            }
+
+            button {
+                font-size: 16px;
+                padding: 10px 15px;
+            }
         }
     </style>
 </head>
@@ -104,9 +188,18 @@
                     // Met à jour le tableau des poubelles
                     updateTrashTable(trashBins);
 
-                    // Préparer la requête d'optimisation
+                    // Filtrer les poubelles pleines
+                    const fullTrashBins = trashBins.filter(bin => bin.isFull);
+
+                    // Si aucune poubelle pleine, afficher un message et sortir
+                    if (fullTrashBins.length === 0) {
+                        alert("Aucune poubelle pleine pour générer un itinéraire.");
+                        return;
+                    }
+
+                    // Préparer la requête d'optimisation pour les poubelles pleines
                     const requestBody = {
-                        jobs: trashBins.map(bin => ({
+                        jobs: fullTrashBins.map(bin => ({
                             id: bin.id,
                             location: [bin.location[0], bin.location[1]]
                         })),
