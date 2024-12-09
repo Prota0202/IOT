@@ -9,7 +9,6 @@
     <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
     <script src="/socket.io/socket.io.js"></script>
     <style>
-        /* Global styles */
         body {
             font-family: Arial, sans-serif;
             margin: 0;
@@ -32,7 +31,6 @@
             font-size: 28px;
         }
 
-        /* Map styles */
         #map {
             height: 600px;
             width: 90%;
@@ -41,7 +39,6 @@
             box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
         }
 
-        /* Table styles */
         #trash-table {
             margin: 20px auto;
             border-collapse: collapse;
@@ -74,45 +71,6 @@
         #trash-table tr:hover {
             background-color: #e8f5e9;
         }
-
-        /* Button styles */
-        button {
-            display: block;
-            margin: 20px auto;
-            padding: 12px 20px;
-            background-color: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            font-size: 18px;
-            cursor: pointer;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            transition: background-color 0.3s;
-        }
-
-        button:hover {
-            background-color: #45a049;
-        }
-
-        /* Responsive styles */
-        @media (max-width: 768px) {
-            #map {
-                width: 100%;
-            }
-
-            #trash-table {
-                width: 100%;
-            }
-
-            h1, h2 {
-                font-size: 24px;
-            }
-
-            button {
-                font-size: 16px;
-                padding: 10px 15px;
-            }
-        }
     </style>
 </head>
 <body>
@@ -144,10 +102,9 @@
 
         const socket = io();
 
-        // Fonction pour mettre à jour le tableau des poubelles
         function updateTrashTable(trashBins) {
             const tbody = document.querySelector('#trash-table tbody');
-            tbody.innerHTML = ''; // Réinitialise le contenu du tableau ...
+            tbody.innerHTML = ''; 
 
             trashBins.forEach(bin => {
                 const row = document.createElement('tr');
@@ -170,7 +127,6 @@
         }
 
         socket.on('trash-bin-data', async (trashBins) => {
-            // Vérification si la géolocalisation est supportée
             if (navigator.geolocation) {
                 navigator.geolocation.getCurrentPosition(async (position) => {
                     const userLat = position.coords.latitude;
@@ -179,25 +135,20 @@
                     map.setView([userLat, userLng], 13);
                     L.marker([userLat, userLng]).addTo(map).bindPopup('Vous êtes ici.').openPopup();
 
-                    // Ajout des poubelles sur la carte
                     trashBins.forEach(bin => {
                         L.marker([bin.location[1], bin.location[0]]).addTo(map)
                             .bindPopup(`<b>Poubelle ID:</b> ${bin.id} <br><b>État:</b> ${bin.isFull ? 'Pleine' : 'Vide'}`);
                     });
 
-                    // Met à jour le tableau des poubelles
                     updateTrashTable(trashBins);
 
-                    // Filtrer les poubelles pleines
                     const fullTrashBins = trashBins.filter(bin => bin.isFull);
-
-                    // Si aucune poubelle pleine, afficher un message et sortir
                     if (fullTrashBins.length === 0) {
                         alert("Aucune poubelle pleine pour générer un itinéraire.");
                         return;
                     }
 
-                    // Préparer la requête d'optimisation pour les poubelles pleines
+                    // Étape 1 : Obtenir l'ordre optimal des poubelles avec Optimization API
                     const requestBody = {
                         jobs: fullTrashBins.map(bin => ({
                             id: bin.id,
@@ -213,8 +164,7 @@
                     };
 
                     try {
-                        // Appeler l'API OpenRouteService pour optimiser le trajet
-                        const response = await axios.post(
+                        const optimizationResponse = await axios.post(
                             `https://api.openrouteservice.org/optimization`,
                             requestBody,
                             {
@@ -224,24 +174,24 @@
                             }
                         );
 
-                        console.log("Réponse de l'API d'optimisation :", response.data);
+                        const optimizedSteps = optimizationResponse.data.routes[0].steps;
+                        console.log("Étapes optimisées :", optimizedSteps);
 
-                        // Extraire l'itinéraire optimisé
-                        const steps = response.data.routes[0].steps;
+                        // Étape 2 : Générer des itinéraires entre les points optimisés avec Directions API
+                        for (let i = 0; i < optimizedSteps.length - 1; i++) {
+                            const start = optimizedSteps[i].location;
+                            const end = optimizedSteps[i + 1].location;
 
-                        // Convertir les étapes en coordonnées pour Leaflet
-                        const optimizedRoute = steps.map(step => [step.location[1], step.location[0]]);
-                        console.log("Itinéraire optimisé :", optimizedRoute);
+                            const directionsResponse = await axios.get(
+                                `https://api.openrouteservice.org/v2/directions/driving-car?api_key=${API_KEY}&start=${start[0]},${start[1]}&end=${end[0]},${end[1]}`
+                            );
 
-                        // Ajouter l'itinéraire optimisé sur la carte
-                        const polylineLayer = L.polyline(optimizedRoute, { color: 'blue', weight: 4 }).addTo(map);
-                        console.log("Polyline ajoutée :", polylineLayer);
-
-                        // Ajuster la carte pour contenir tout l'itinéraire
-                        map.fitBounds(polylineLayer.getBounds());
+                            const routeCoords = directionsResponse.data.features[0].geometry.coordinates.map(coord => [coord[1], coord[0]]);
+                            L.polyline(routeCoords, { color: 'blue', weight: 4 }).addTo(map);
+                        }
                     } catch (error) {
-                        console.error("Erreur lors de l'appel à l'API d'optimisation :", error.response || error);
-                        alert("Impossible d'optimiser l'itinéraire.");
+                        console.error("Erreur lors de l'appel aux APIs :", error.response || error);
+                        alert("Impossible de générer un itinéraire optimisé.");
                     }
                 }, (error) => {
                     console.error("Erreur lors de la récupération de la position :", error);
@@ -254,4 +204,3 @@
     </script>
 </body>
 </html>
-
