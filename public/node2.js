@@ -47,7 +47,6 @@ client.on('message', (topic, message) => {
         if (ttnData.uplink_message) {
             console.log('ℹ️ Traitement du payload uplink_message...');
             
-            // Utilisation de `decoded_payload` pour récupérer les données
             const decodedPayload = ttnData.uplink_message.decoded_payload;
             if (!decodedPayload) {
                 console.warn('⚠️ Aucune donnée décodée trouvée.');
@@ -57,7 +56,7 @@ client.on('message', (topic, message) => {
             console.log('✅ Payload décodé:', decodedPayload);
 
             // Vérification de l'état de la poubelle
-            const isFull = decodedPayload.status === 'full';
+            const isFull = decodedPayload.status === 'pleine';
             console.log(`ℹ️ État de la poubelle: ${isFull ? 'Pleine' : 'Vide'}`);
 
             // Récupération des coordonnées GPS
@@ -80,6 +79,9 @@ client.on('message', (topic, message) => {
                     console.log('ℹ️ Nouvelle poubelle ajoutée:', updatedBin);
                 }
 
+                // Logs de la liste complète
+                console.log('📤 Liste complète des poubelles (trashBins):', trashBins);
+
                 // Envoi des données mises à jour aux clients via Socket.io
                 console.log('📤 Envoi des données mises à jour aux clients...');
                 io.emit('trash-bin-data', trashBins);
@@ -94,14 +96,15 @@ client.on('message', (topic, message) => {
     }
 });
 
-// Configuration pour servir les fichiers statiques
-app.use(express.static('public', {
-    setHeaders: (res, path) => {
-        console.log('🗂️ Fichier statique servi:', path);
-    }
-}));
+// Middleware pour servir les fichiers statiques
+app.use(express.static('public'));
 
-// Démarrage du serveur
+// Route principale pour servir index.html
+app.get('/', (req, res) => {
+    res.sendFile('/Users/Samir/Desktop/IOT/public/index.html');
+});
+
+// Lancement du serveur
 const PORT = 3000;
 server.listen(PORT, () => {
     console.log(`🚀 Serveur démarré sur http://localhost:${PORT}`);
