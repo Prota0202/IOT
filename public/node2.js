@@ -4,6 +4,8 @@ const http = require('http');
 const socketio = require('socket.io');
 
 // Configuration de l'application et des serveurs
+
+
 const app = express();
 const server = http.createServer(app);
 const io = socketio(server);
@@ -119,4 +121,6 @@ io.on('connection', (socket) => {
     socket.on('disconnect', () => {
         console.log('🔴 Client déconnecté');
     });
+
 });
+

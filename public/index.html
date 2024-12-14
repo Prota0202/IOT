@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="/socket.io/socket.io.js"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -47,6 +48,23 @@
             padding: 12px;
             text-align: center;
         }
+
+        #trash-table button {
+            padding: 8px 12px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        #trash-table button.active {
+            background-color: #f44336; /* Couleur rouge pour indiquer l'état actif */
+        }
+
+        #trash-table button:hover {
+            background-color: #45a049;
+        }
     </style>
 </head>
 <body>
@@ -58,62 +76,122 @@
                 <th>ID</th>
                 <th>Coordonnées</th>
                 <th>État</th>
+                <th>Action</th>
             </tr>
         </thead>
         <tbody></tbody>
     </table>
 
     <script>
+        const API_KEY = "5b3ce3597851110001cf624841cb73eff84c4ceba6a00867d1f54afa"; // OpenRouteService API Key
         const map = L.map('map').setView([0, 0], 2);
+        const socket = io();
+        let userPosition = null;
+        let userMarker = null;
+        let trashBins = []; // Stocke les poubelles reçues
+        let activeRoutes = {}; // Stocke les itinéraires actifs (id de la poubelle comme clé)
 
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
             maxZoom: 19,
             attribution: '© OpenStreetMap contributors'
         }).addTo(map);
 
-        const socket = io();
+        // Fonction pour tracer ou supprimer un itinéraire
+        async function toggleRouteToBin(button, bin) {
+            if (!userPosition) {
+                alert("Votre position actuelle n'a pas été détectée.");
+                return;
+            }
 
-        socket.on('connect', () => {
-            console.log('🟢 Socket.io connecté au backend.');
-        });
+            if (activeRoutes[bin.id]) {
+                // Supprimer l'itinéraire actif
+                map.removeLayer(activeRoutes[bin.id]);
+                delete activeRoutes[bin.id];
+                button.classList.remove("active");
+                button.textContent = "Tracer le chemin";
+                console.log(`❌ Itinéraire supprimé pour la poubelle ID: ${bin.id}`);
+            } else {
+                // Tracer un nouvel itinéraire
+                const url = `https://api.openrouteservice.org/v2/directions/driving-car?api_key=${API_KEY}&start=${userPosition.lng},${userPosition.lat}&end=${bin.location[0]},${bin.location[1]}`;
+                try {
+                    const response = await axios.get(url);
+                    const routeCoords = response.data.features[0].geometry.coordinates.map(coord => [coord[1], coord[0]]);
+                    const polyline = L.polyline(routeCoords, { color: 'blue', weight: 4 }).addTo(map);
+                    activeRoutes[bin.id] = polyline; // Enregistrer le polyline pour cette poubelle
+                    button.classList.add("active");
+                    button.textContent = "Supprimer le chemin";
+                    console.log(`✅ Itinéraire tracé pour la poubelle ID: ${bin.id}`);
+                } catch (error) {
+                    console.error("❌ Erreur lors de la récupération de l'itinéraire :", error);
+                }
+            }
+        }
 
-        socket.on('disconnect', () => {
-            console.log('🔴 Socket.io déconnecté du backend.');
-        });
-
+        // Fonction pour mettre à jour le tableau
         function updateTrashTable(trashBins) {
             const tbody = document.querySelector('#trash-table tbody');
             tbody.innerHTML = '';
 
             trashBins.forEach(bin => {
-                console.log('Mise à jour du tableau pour la poubelle:', bin);
                 const row = document.createElement('tr');
+
                 row.innerHTML = `
                     <td>${bin.id}</td>
                     <td>Lat: ${bin.location[1]}, Lng: ${bin.location[0]}</td>
                     <td>${bin.isFull ? 'Pleine' : 'Vide'}</td>
                 `;
+
+                const actionCell = document.createElement('td');
+                const button = document.createElement('button');
+                button.textContent = "Tracer le chemin";
+                button.onclick = () => toggleRouteToBin(button, bin); // Ajouter l'événement de clic
+                actionCell.appendChild(button);
+                row.appendChild(actionCell);
+
                 tbody.appendChild(row);
             });
+
+            console.log('✅ Tableau mis à jour avec les données des poubelles.');
         }
 
-        socket.on('trash-bin-data', (trashBins) => {
-            console.log('📩 Données reçues du backend:', trashBins);
-
+        // Socket.io : Réception des données des poubelles
+        socket.on('trash-bin-data', (bins) => {
+            trashBins = bins; // Met à jour les poubelles globales
             updateTrashTable(trashBins);
 
-            map.eachLayer((layer) => {
-                if (layer instanceof L.Marker || layer instanceof L.Polyline) {
+            map.eachLayer(layer => {
+                if (layer instanceof L.Marker && layer !== userMarker) {
                     map.removeLayer(layer);
                 }
             });
 
             trashBins.forEach(bin => {
-                console.log('Ajout d\'un marqueur pour la poubelle:', bin);
                 L.marker([bin.location[1], bin.location[0]]).addTo(map)
-                    .bindPopup(`<b>ID:</b> ${bin.id} <br><b>État:</b> ${bin.isFull ? 'Pleine' : 'Vide'}`);
+                    .bindPopup(`<b>ID:</b> ${bin.id}<br><b>État:</b> ${bin.isFull ? 'Pleine' : 'Vide'}`);
             });
         });
+
+        // Récupérer la position actuelle de l'utilisateur
+
+        
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    userPosition = {
+                        lat: position.coords.latitude,
+                        lng: position.coords.longitude
+                    };
+                    if (userMarker) map.removeLayer(userMarker);
+                    userMarker = L.marker([userPosition.lat, userPosition.lng]).addTo(map)
+                        .bindPopup("Vous êtes ici").openPopup();
+                    map.setView([userPosition.lat, userPosition.lng], 13);
+                },
+                (error) => {
+                    console.error("❌ Erreur lors de la récupération de la position :", error);
+                }
+            );
+        }
     </script>
 </body>
 </html>
+
